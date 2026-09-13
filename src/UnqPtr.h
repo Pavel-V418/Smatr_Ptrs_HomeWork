@@ -17,6 +17,9 @@ private:
             delete p;
     }
 
+    template <class U>
+    friend class UnqPtr;
+
 public:
     explicit UnqPtr(Type* ptr = nullptr)
         : ptr(ptr) {}
@@ -41,6 +44,28 @@ public:
             ptr = other.ptr;
             other.ptr = nullptr;
         }
+        return *this;
+    }
+
+    // SubTyping
+    template <class U>
+    UnqPtr(const UnqPtr<U>& other) = delete;
+
+    template <class U>
+    UnqPtr& operator= (UnqPtr& other) = delete;
+
+    template <class U>
+    UnqPtr(UnqPtr<U>&& other) noexcept
+        : ptr(static_cast<Type*>(other.ptr)) {
+        other.ptr = nullptr;
+    }
+
+    template <class U>
+    UnqPtr& operator= (UnqPtr<U>&& other) noexcept {
+        clean(ptr);
+
+        ptr = static_cast<Type*>(other.ptr);
+        other.ptr = nullptr;
         return *this;
     }
 
