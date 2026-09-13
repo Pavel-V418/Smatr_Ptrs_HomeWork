@@ -5,4 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_executable(HM_SmatrPtrs main.cpp
         src/UnqPtr.h
-        src/ShrdPtr.h)
+        src/ShrdPtr.h
+        src/MemorySpan.h
+        src/MsPtr.h)
