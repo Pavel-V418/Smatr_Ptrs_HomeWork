@@ -2,6 +2,7 @@
 
 #include "UnqPtr.h"
 #include "ShrdPtr.h"
+#include "MsPtr.h"
 #include <stdexcept>
 
 template <class T>
@@ -11,6 +12,11 @@ private:
     UnqPtr<T[]> data;
     int size;
     int capacity;
+
+    void check_index(int index) {
+        if (index < 0 || index >= size)
+            throw std::out_of_range("Index out of range");
+    }
 
 
 public:
@@ -23,6 +29,9 @@ public:
         if (init_size > 0)
             data.reset(new T[init_size]);
     }
+
+    MemorySpan(const MemorySpan&) = delete;
+    MemorySpan& operator=(const MemorySpan&) = delete;
 
     // Move-семантика
     MemorySpan(MemorySpan&& other) noexcept
@@ -52,18 +61,30 @@ public:
         return capacity;
     }
 
+    void set(int index, const T& value) {
+        check_index(index);
+
+        data[index] = value;
+    }
+
     UnqPtr<T> get(int index) {
-        if (index < 0 || index >= size)
-            throw std::out_of_range("Index out of range");
+        check_index(index);
+
         return UnqPtr<T>(new T(data[index]));
     }
 
     ShrdPtr<T> copy(int index) {
-        if (index < 0 || index >= size)
-            throw std::out_of_range("Index out of range");
+        check_index(index);
 
         return ShrdPtr<T>(new T(data[index]));
     }
 
+    MsPtr<T> locate(int index) {
+        check_index(index);
+
+        T* base_ptr = data.get();  // Вытаскиваем базовый сырой указатель из UnqPtr
+
+        return MsPtr<T>(base_ptr + index, base_ptr, base_ptr + size);
+    }
 
 };

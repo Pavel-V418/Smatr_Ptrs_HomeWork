@@ -67,4 +67,12 @@ public:
             throw std::out_of_range("Cannot dereference end pointer");
         return current;
     }
+
+    bool operator==(const MsPtr& other) const noexcept {
+        return current == other.current;
+    }
+
+    bool operator!=(const MsPtr& other) const noexcept {
+        return current != other.current;
+    }
 };
