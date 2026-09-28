@@ -4,16 +4,7 @@
 #include "../src/MsPtr.h"
 #include "../src/UnqPtr.h"
 #include "../src/ShrdPtr.h"
-
-// --- Вспомогательный класс-шпион для отслеживания утечек ---
-struct InstanceTracker {
-    inline static int active_instances = 0;
-    int value;
-
-    InstanceTracker(int v = 0) : value(v) { ++active_instances; }
-    InstanceTracker(const InstanceTracker& other) : value(other.value) { ++active_instances; }
-    virtual ~InstanceTracker() { --active_instances; }
-};
+#include "instance_tracker.h"
 
 // 1. ИНИЦИАЛИЗАЦИЯ И КОНТРОЛЬ ГРАНИЦ
 
@@ -98,7 +89,6 @@ TEST(MemorySpanTest, MoveConstructorAndAssignmentTransferBuffer) {
 // 5. КОНТРОЛЬ ПАМЯТИ И УТЕЧЕК
 
 TEST(MemorySpanTest, MemorySpanCleansUpCorrectly) {
-    InstanceTracker::active_instances = 0;
     {
         // Создаем массив на 4 объекта
         MemorySpan<InstanceTracker> span(4);
@@ -124,4 +114,40 @@ TEST(MemorySpanTest, MemorySpanCleansUpCorrectly) {
     EXPECT_EQ(InstanceTracker::active_instances, 0);
 }
 
-// тест для сета
+// 6. БЕЗОПАСНОСТЬ set() ДЛЯ ПАМЯТИ
+
+TEST(MemorySpanTest, SetDoesNotCorruptOrLeakMemory) {
+    {
+        MemorySpan<InstanceTracker> span(3);
+        EXPECT_EQ(InstanceTracker::active_instances, 3);
+
+        span.set(0, InstanceTracker(10));
+        span.set(1, InstanceTracker(20));
+        span.set(2, InstanceTracker(30));
+        EXPECT_EQ(InstanceTracker::active_instances, 3);
+        EXPECT_EQ(span.get(0)->value, 10);
+        EXPECT_EQ(span.get(1)->value, 20);
+        EXPECT_EQ(span.get(2)->value, 30);
+
+        // Повторная запись в одну и ту же ячейку не должна ничего "утекать"
+        span.set(0, InstanceTracker(999));
+        EXPECT_EQ(InstanceTracker::active_instances, 3);
+        EXPECT_EQ(span.get(0)->value, 999);
+
+        // Самоприсваивание: читаем значение из ячейки и тут же пишем его
+        // обратно в неё же. Не должно приводить ни к утечке, ни к падению.
+        {
+            InstanceTracker self_value = *span.locate(1);
+            span.set(1, self_value);
+        }
+        EXPECT_EQ(InstanceTracker::active_instances, 3);
+        EXPECT_EQ(span.get(1)->value, 20);
+
+        // Выход за границы по-прежнему запрещён
+        EXPECT_THROW(span.set(3, InstanceTracker(0)), std::out_of_range);
+        EXPECT_THROW(span.set(-1, InstanceTracker(0)), std::out_of_range);
+        EXPECT_EQ(InstanceTracker::active_instances, 3);
+    }
+    // span уничтожен - все 3 элемента должны быть корректно удалены через delete[]
+    EXPECT_EQ(InstanceTracker::active_instances, 0);
+}

@@ -1,25 +1,11 @@
 #include <gtest/gtest.h>
 #include <utility>
 #include "../src/ShrdPtr.h"
-
-// --- Вспомогательный класс-шпион для отслеживания утечек ---
-struct InstanceTracker {
-    inline static int active_instances = 0;
-    int value;
-
-    InstanceTracker(int v = 0) : value(v) { ++active_instances; }
-    InstanceTracker(const InstanceTracker& other) : value(other.value) { ++active_instances; }
-    virtual ~InstanceTracker() { --active_instances; }
-};
-
-struct DerivedTracker : public InstanceTracker {
-    DerivedTracker(int v = 0) : InstanceTracker(v) {}
-};
+#include "instance_tracker.h"
 
 // 1. КОНТРОЛЬ СЧЕТЧИКА ССЫЛОК И ЖИЗНЕННОГО ЦИКЛА
 
 TEST(ShrdPtrTest, SharedOwnershipAndDestruction) {
-    InstanceTracker::active_instances = 0;
     {
         ShrdPtr<InstanceTracker> p1(new InstanceTracker(100));
         EXPECT_EQ(InstanceTracker::active_instances, 1);
@@ -36,7 +22,6 @@ TEST(ShrdPtrTest, SharedOwnershipAndDestruction) {
 }
 
 TEST(ShrdPtrTest, ResetDropsReferenceCorrectly) {
-    InstanceTracker::active_instances = 0;
     ShrdPtr<InstanceTracker> p1(new InstanceTracker(1));
     ShrdPtr<InstanceTracker> p2 = p1;
 
@@ -54,7 +39,6 @@ TEST(ShrdPtrTest, ResetDropsReferenceCorrectly) {
 // 2. COPY- И MOVE-СЕМАНТИКА
 
 TEST(ShrdPtrTest, CopyAssignmentOverwritesAndCleans) {
-    InstanceTracker::active_instances = 0;
     ShrdPtr<InstanceTracker> p1(new InstanceTracker(1));
     {
         ShrdPtr<InstanceTracker> p2(new InstanceTracker(2));
@@ -74,7 +58,6 @@ TEST(ShrdPtrTest, CopyAssignmentOverwritesAndCleans) {
 }
 
 TEST(ShrdPtrTest, MoveSemanticsTransfersOwnershipWithoutIncrement) {
-    InstanceTracker::active_instances = 0;
     ShrdPtr<InstanceTracker> p1(new InstanceTracker(42));
 
     // Передаем владение: счетчик не должен расти, объект не должен копироваться
@@ -92,7 +75,6 @@ TEST(ShrdPtrTest, MoveSemanticsTransfersOwnershipWithoutIncrement) {
 // 3. БЕЗОПАСНАЯ РАБОТА С МАССИВАМИ
 
 TEST(ShrdPtrTest, ArraySpecializationHandlesDeleteArray) {
-    InstanceTracker::active_instances = 0;
     {
         // Создаем массив из 3 элементов.
         ShrdPtr<InstanceTracker[]> arr_ptr(new InstanceTracker[3]);
@@ -113,7 +95,6 @@ TEST(ShrdPtrTest, ArraySpecializationHandlesDeleteArray) {
 // 4. ПОДТИПИЗАЦИЯ И ПОЛИМОРФИЗМ
 
 TEST(ShrdPtrTest, SubtypingCopyAndMove) {
-    InstanceTracker::active_instances = 0;
     {
         ShrdPtr<DerivedTracker> derived(new DerivedTracker(88));
 

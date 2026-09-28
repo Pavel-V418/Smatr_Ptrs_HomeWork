@@ -3,6 +3,33 @@ project(HM_SmatrPtrs)
 
 set(CMAKE_CXX_STANDARD 20)
 
+enable_testing()
+
+# --- Санитайзеры (ASan/UBSan) на Windows ---
+#
+# Использование:
+#   cmake -B build-san -DENABLE_SANITIZERS=ON
+#   cmake --build build-san
+#   .\build-san\run_tests.exe
+#
+# Что именно получишь — зависит от тулчейна в CLion (Settings ->
+# Build, Execution, Deployment -> Toolchains):
+#   - MSVC (Visual Studio, VS2019 16.9+) -> только AddressSanitizer
+#     (/fsanitize=address, см. ветку MSVC ниже). Ловит переполнения
+#     буфера и use-after-free. Нет UBSan и нет встроенного
+#     детектора утечек.
+#   - MinGW (GCC) или Clang -> полный набор, как на Linux:
+#     -fsanitize=address,undefined - ASan + UBSan + встроенный
+#     детектор утечек.
+#
+# Valgrind под Windows не существует (порта нет). Для проверки утечек
+# памяти его роль играет Dr. Memory (https://drmemory.org/, бесплатный,
+# работает с exe от любого компилятора) — запускать на ОБЫЧНОЙ сборке,
+# без ENABLE_SANITIZERS (санитайзеры и Dr. Memory вместе не совмещать):
+#   cmake -B build && cmake --build build
+#   drmemory -- .\build\run_tests.exe
+option(ENABLE_SANITIZERS "Собирать run_tests с AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+
 include(FetchContent)
 FetchContent_Declare(
         googletest
@@ -26,10 +53,53 @@ add_executable(run_tests
         tests/shrd_ptrs_tests.cpp
         tests/memory_span_tests.cpp
         tests/ms_ptrs_tests.cpp
+        tests/instance_tracker.h
+        tests/instance_tracker.cpp
+        tests/test_main.cpp
 )
 
 # 5. Линковка тестов с GTest
-target_link_libraries(run_tests GTest::gtest_main)
+# Используем GTest::gtest (без встроенного main), т.к. свой main.cpp
+# в tests/test_main.cpp регистрирует слушателя InstanceTracker перед
+# RUN_ALL_TESTS() - это и пишет Tracker.txt после каждого теста.
+target_link_libraries(run_tests GTest::gtest)
+
+# Абсолютный путь к папке tests/, чтобы Tracker.txt всегда писался туда,
+# а не в текущую рабочую директорию процесса (которая зависит от того,
+# из какой папки сборки/конфигурации запуска реально стартовал
+# run_tests.exe - cmake-build-debug, build-san и т.п.). См.
+# tests/instance_tracker.cpp::default_tracker_path().
+#
+# Путь передаётся через configure_file() (генерируем заголовок с #define),
+# а НЕ через target_compile_definitions/-D на командной строке компилятора —
+# так безопаснее, если путь к проекту содержит не-ASCII символы (например,
+# кириллицу в имени пользователя Windows), см. пояснение в
+# tests/tracker_config.h.in.
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/tracker_config.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/tracker_config.h
+        @ONLY
+)
+target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+# MSVC без этого флага угадывает кодировку исходников по локали системы
+# (для русской Windows — обычно codepage 1251), а не считает их UTF-8.
+# Сгенерированный tracker_config.h содержит путь с кириллицей без BOM —
+# без /utf-8 MSVC мог бы неверно раскодировать эти байты в строковый
+# литерал ещё на этапе компиляции. GCC/Clang по умолчанию и так считают
+# исходники UTF-8, им это не нужно.
+if (MSVC)
+    target_compile_options(run_tests PRIVATE /utf-8)
+endif()
+
+if (ENABLE_SANITIZERS)
+    if (MSVC)
+        target_compile_options(run_tests PRIVATE /fsanitize=address)
+    else()
+        target_compile_options(run_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(run_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+endif()
 
 # 6. Интеграция с интерфейсом тестирования CLion
 include(GoogleTest)
