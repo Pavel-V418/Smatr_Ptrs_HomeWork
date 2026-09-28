@@ -5,29 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 enable_testing()
 
-# --- Санитайзеры (ASan/UBSan) на Windows ---
-#
-# Использование:
-#   cmake -B build-san -DENABLE_SANITIZERS=ON
-#   cmake --build build-san
-#   .\build-san\run_tests.exe
-#
-# Что именно получишь — зависит от тулчейна в CLion (Settings ->
-# Build, Execution, Deployment -> Toolchains):
-#   - MSVC (Visual Studio, VS2019 16.9+) -> только AddressSanitizer
-#     (/fsanitize=address, см. ветку MSVC ниже). Ловит переполнения
-#     буфера и use-after-free. Нет UBSan и нет встроенного
-#     детектора утечек.
-#   - MinGW (GCC) или Clang -> полный набор, как на Linux:
-#     -fsanitize=address,undefined - ASan + UBSan + встроенный
-#     детектор утечек.
-#
-# Valgrind под Windows не существует (порта нет). Для проверки утечек
-# памяти его роль играет Dr. Memory (https://drmemory.org/, бесплатный,
-# работает с exe от любого компилятора) — запускать на ОБЫЧНОЙ сборке,
-# без ENABLE_SANITIZERS (санитайзеры и Dr. Memory вместе не совмещать):
-#   cmake -B build && cmake --build build
-#   drmemory -- .\build\run_tests.exe
 option(ENABLE_SANITIZERS "Собирать run_tests с AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 
 include(FetchContent)
@@ -88,6 +65,12 @@ target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generat
 # без /utf-8 MSVC мог бы неверно раскодировать эти байты в строковый
 # литерал ещё на этапе компиляции. GCC/Clang по умолчанию и так считают
 # исходники UTF-8, им это не нужно.
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
+endif()
+
 if (MSVC)
     target_compile_options(run_tests PRIVATE /utf-8)
 endif()
