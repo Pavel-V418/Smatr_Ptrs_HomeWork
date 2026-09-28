@@ -35,6 +35,30 @@ add_executable(run_tests
         tests/test_main.cpp
 )
 
+
+# Нагрузочные тесты (время + память), отдельный бинарник.
+# ВАЖНО: собирается без санитайзеров и с оптимизацией — иначе цифры времени
+# ничего не будут значить (см. ниже, почему это раньше было не так).
+add_executable(run_benchmarks
+        bench/bench_alloc_counter.h
+        bench/bench_alloc_counter.cpp
+        bench/bench_common.h
+        bench/bench_escape.h
+        bench/bench_escape.cpp
+        bench/bench_unqptr.cpp
+        bench/bench_shrdptr.cpp
+        bench/bench_memoryspan.cpp
+        bench/bench_msptr.cpp
+        bench/bench_main.cpp
+)
+target_include_directories(run_benchmarks PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+if (MSVC)
+    target_compile_options(run_benchmarks PRIVATE /utf-8 /O2)
+else()
+    target_compile_options(run_benchmarks PRIVATE -O2)
+endif()
+
 # 5. Линковка тестов с GTest
 # Используем GTest::gtest (без встроенного main), т.к. свой main.cpp
 # в tests/test_main.cpp регистрирует слушателя InstanceTracker перед
